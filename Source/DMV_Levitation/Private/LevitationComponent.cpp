@@ -34,20 +34,50 @@ void ULevitationComponent::ModifyTimeLine(FRuntimeFloatCurve* Curve)
 void ULevitationComponent::StartLevitation()
 {
 	ModifyTimeLine(&LevitationCurve);
+	// Initial impulse
+	switch (ImpulseMode)
+	{
+		case EImpulseMode::Repeat:
+			CharacterMovementComponent->Velocity += FVector(0, 0, LaunchVerticalImpulse);
+			CharacterMovementComponent->Velocity += OwnerCharacter->GetActorForwardVector() *
+				FVector(LaunchHorizontalImpulse, LaunchHorizontalImpulse, 0);
+			break;
+		case EImpulseMode::Cooldown:
+			if (bImpulseActive)
+			{
+				CharacterMovementComponent->Velocity += FVector(0, 0, LaunchVerticalImpulse);
+				CharacterMovementComponent->Velocity += OwnerCharacter->GetActorForwardVector() *
+					FVector(LaunchHorizontalImpulse, LaunchHorizontalImpulse, 0);
+				bImpulseActive = false;
+				GetWorld()->GetTimerManager().SetTimer(ImpulseCooldownTimerHandle, this,
+					&ULevitationComponent::ResetImpulseCooldown, ImpulseCooldown, false, ImpulseCooldown);
+			}
+			break;
+		case EImpulseMode::Once:
+			if (CharacterMovementComponent->CanAttemptJump())
+			{
+				CharacterMovementComponent->Velocity += FVector(0, 0, LaunchVerticalImpulse);
+				CharacterMovementComponent->Velocity += OwnerCharacter->GetActorForwardVector() *
+					FVector(LaunchHorizontalImpulse, LaunchHorizontalImpulse, 0);
+			}
+			break;
+	}
 	// Set movement mode to falling
 	CharacterMovementComponent->SetMovementMode(MOVE_Falling);
-	// Initial impulse
-	CharacterMovementComponent->Velocity += FVector(0, 0, InitialVerticalImpulse);
 	// Set gravity scale to start value
 	CharacterMovementComponent->GravityScale = StartLevitationScale;
 	// Play timeline
-	LevitationTimelineComponent->Play();
-
-	if (bStopMoment)
+	LevitationTimelineComponent->PlayFromStart();
+	if (bStopMomentum)
 	{
 		FTimerHandle StopMomentTimerHandle;
-		GetWorld()->GetTimerManager().SetTimer(StopMomentTimerHandle, this, &ULevitationComponent::StopVerticalMoment, StopMomentDelay, false, StopMomentDelay);
+		GetWorld()->GetTimerManager().SetTimer(StopMomentTimerHandle, this, &ULevitationComponent::StopVerticalMoment, StopMomentumDelay, false, StopMomentumDelay);
 	}
+}
+
+void ULevitationComponent::ResetImpulseCooldown()
+{
+	bImpulseActive = true;
 }
 
 void ULevitationComponent::StopLevitation()
@@ -58,7 +88,6 @@ void ULevitationComponent::StopLevitation()
 	CharacterMovementComponent->GravityScale = DefaultLevitationScale;
 	// Stop timeline
 	LevitationTimelineComponent->Stop();
-	
 }
 
 void ULevitationComponent::StopVerticalMoment()
@@ -89,5 +118,34 @@ void ULevitationComponent::InitComponent()
 		}
 	}
 	
+}
+
+void ULevitationComponent::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+
+	if (PropertyChangedEvent.Property != nullptr)
+	{
+		FName PropertyName = PropertyChangedEvent.Property->GetFName();
+		if (PropertyName == GET_MEMBER_NAME_CHECKED(ULevitationComponent, LevitationPreset))
+		{
+			if (LevitationPreset == ELevitationType::Jetpack)
+			{
+				LaunchVerticalImpulse = 250.0f;
+				StartLevitationScale = 0.f;
+				TargetLevitationScale = 2.5f;
+				bStopMomentum = false;
+				StopMomentumDelay = 0.f;
+			}
+			if (LevitationPreset == ELevitationType::Parasail)
+			{
+				LaunchVerticalImpulse = 250.0f;
+				StartLevitationScale = .0f;
+				TargetLevitationScale = .7f;
+				bStopMomentum = false;
+				StopMomentumDelay = .0f;
+			}
+		}
+	}
 }
 
